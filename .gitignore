@@ -1,0 +1,52 @@
+# ─── Secrets — never commit ────────────────────────────────────────────
+# Per-account env files (only example.env is allowed)
+accounts/*.env
+!accounts/example.env
+
+# Top-level .env files
+.env
+.env.*
+!.env.example
+
+# Private keys (any extension)
+*.pem
+*.key
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# OCI / cloud configs accidentally placed in repo
+config
+oci_api_key.pem
+
+# ─── Runtime artifacts ─────────────────────────────────────────────────
+# Logs
+*.log
+logs/
+Library/Logs/oracle-*.log
+
+# Caches
+.cache/
+
+# Lock files
+oracle-*.lock
+*.lock
+
+# Personal launchd plists (not part of the repo — see templates/)
+com.*.oracle-*.plist
+
+# ─── OS / IDE noise ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.bak
+*.bck
+*.swp
+*~
+
+# ─── Tooling artifacts ─────────────────────────────────────────────────
+node_modules/
+.venv/
+__pycache__/

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.{{REVERSE_DOMAIN}}.oracle-{{ACCOUNT}}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{REPO_DIR}}/oracle-launch.sh</string>
+        <string>{{ACCOUNT}}</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>{{REPO_DIR}}</string>
+
+    <!-- Schedule: customize per account so accounts run at different minutes -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Minute</key>
+            <integer>{{MINUTE_A}}</integer>
+        </dict>
+        <dict>
+            <key>Minute</key>
+            <integer>{{MINUTE_B}}</integer>
+        </dict>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>{{HOME}}/Library/Logs/oracle-{{ACCOUNT}}-launchd.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{HOME}}/Library/Logs/oracle-{{ACCOUNT}}-launchd.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>
