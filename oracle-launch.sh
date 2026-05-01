@@ -231,4 +231,7 @@ done
 
 log "Failed after $MAX_RETRIES attempts across ${TOTAL_ADS} AD(s): ${ADS[*]}"
 notify "⏱️ Out of capacity — all ${TOTAL_ADS} AD(s) exhausted across $MAX_RETRIES attempts"
-exit 1
+# Exit 0: capacity exhaustion is the expected steady-state outcome on free
+# tier and shouldn't mark scheduled jobs as failed. Truly fatal conditions
+# (auth, config, missing deps) keep returning exit 1 above.
+exit 0

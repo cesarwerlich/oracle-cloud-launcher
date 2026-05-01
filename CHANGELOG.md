@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-05-01
+
+### Changed
+- Out-of-capacity (all ADs exhausted) now exits 0 instead of 1 — this is the
+  expected steady-state for free-tier ARM and shouldn't mark GitHub Actions
+  / launchd runs as failed. Truly fatal errors (auth, missing config) still
+  exit 1.
+
 ## [1.0.0] - 2026-05-01
 
 ### Added
@@ -25,5 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets read from per-account `.env` files (gitignored) or from GitHub Secrets in CI
 - OCI API keys never committed; `~/.oci/config` synthesized per workflow run
 
-[Unreleased]: https://github.com/cesarwerlich/oracle-cloud-launcher/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/cesarwerlich/oracle-cloud-launcher/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/cesarwerlich/oracle-cloud-launcher/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/cesarwerlich/oracle-cloud-launcher/releases/tag/v1.0.0
