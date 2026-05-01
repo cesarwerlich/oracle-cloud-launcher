@@ -1,27 +1,35 @@
-name: Oracle GMX Launcher
+name: Oracle Account A Launcher
+
+# Account-agnostic workflow. The actual OCI account is determined by the
+# `account_a` GitHub Environment, which holds the secrets used below.
+# Duplicate this file (and the matching environment) for additional accounts.
 
 on:
   schedule:
-    # Run at :00 and :30 every hour (UTC)
-    # Note: GitHub Actions cron may be delayed during peak load.
+    # Runs at :00 and :30 every hour (UTC).
+    # Stagger differently in other account workflows.
     - cron: '0,30 * * * *'
-  workflow_dispatch: {}  # allow manual trigger from Actions tab
+  workflow_dispatch: {}
 
-# Prevent overlapping runs of this workflow (matches local lock-file behavior)
 concurrency:
-  group: oracle-gmx
+  group: oracle-account-a
   cancel-in-progress: false
 
 jobs:
   launch:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    environment: account_a
+
+    env:
+      # Internal account key — drives lock file, log file, env file lookup.
+      ACCOUNT_KEY: account-a
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install jq (already on runner, just sanity-check)
+      - name: Sanity-check jq
         run: jq --version
 
       - name: Install OCI CLI
@@ -35,18 +43,20 @@ jobs:
         run: oci --version
 
       - name: Write SSH public key
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           mkdir -p "$HOME/.ssh"
-          printf '%s\n' "${{ secrets.SSH_PUBLIC_KEY }}" > "$HOME/.ssh/id_rsa.pub"
+          printf '%s\n' "$SSH_PUBLIC_KEY" > "$HOME/.ssh/id_rsa.pub"
           chmod 644 "$HOME/.ssh/id_rsa.pub"
 
       - name: Write OCI config + API key
         env:
-          OCI_USER: ${{ secrets.GMX_OCI_USER }}
-          OCI_FINGERPRINT: ${{ secrets.GMX_OCI_FINGERPRINT }}
-          OCI_TENANCY: ${{ secrets.GMX_OCI_TENANCY }}
-          OCI_REGION: ${{ secrets.GMX_OCI_REGION }}
-          OCI_KEY_PEM: ${{ secrets.GMX_OCI_KEY_PEM }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_KEY_PEM: ${{ secrets.OCI_KEY_PEM }}
         run: |
           mkdir -p "$HOME/.oci"
           printf '%s\n' "$OCI_KEY_PEM" > "$HOME/.oci/api-key.pem"
@@ -63,17 +73,17 @@ jobs:
 
       - name: Write account env file
         env:
-          ACCOUNT_LABEL: "🇩🇪 GMX (CI)"
-          COMPARTMENT_OCID: ${{ secrets.GMX_COMPARTMENT_OCID }}
-          SUBNET_OCID: ${{ secrets.GMX_SUBNET_OCID }}
-          IMAGE_OCID: ${{ secrets.GMX_IMAGE_OCID }}
-          AD_NAMES: ${{ secrets.GMX_AD_NAMES }}
-          INSTANCE_NAME: ${{ vars.GMX_INSTANCE_NAME || 'oracle-gmx-vm-arm-01' }}
+          ACCOUNT_LABEL: ${{ secrets.ACCOUNT_LABEL }}
+          COMPARTMENT_OCID: ${{ secrets.COMPARTMENT_OCID }}
+          SUBNET_OCID: ${{ secrets.SUBNET_OCID }}
+          IMAGE_OCID: ${{ secrets.IMAGE_OCID }}
+          AD_NAMES: ${{ secrets.AD_NAMES }}
+          INSTANCE_NAME: ${{ secrets.INSTANCE_NAME }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           mkdir -p accounts
-          cat > accounts/gmx.env <<EOF
+          cat > "accounts/${ACCOUNT_KEY}.env" <<EOF
           ACCOUNT_LABEL="$ACCOUNT_LABEL"
           COMPARTMENT_OCID="$COMPARTMENT_OCID"
           SUBNET_OCID="$SUBNET_OCID"
@@ -94,4 +104,4 @@ jobs:
       - name: Run launcher
         run: |
           chmod +x ./oracle-launch.sh
-          ./oracle-launch.sh gmx
+          ./oracle-launch.sh "$ACCOUNT_KEY"

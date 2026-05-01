@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.{{REVERSE_DOMAIN}}.oracle-{{ACCOUNT}}</string>
+    <string>{{REVERSE_DOMAIN}}.oracle-{{ACCOUNT}}</string>
 
     <key>ProgramArguments</key>
     <array>

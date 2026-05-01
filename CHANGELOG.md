@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-01
+
+### Changed (BREAKING)
+- **Account-agnostic naming convention.** All committed identifiers now use
+  generic keys (`account-a`, `account-b`, …) instead of leaking your real
+  account names. Workflow files renamed:
+  - `.github/workflows/oracle-gmx.yml` → `.github/workflows/oracle-account-a.yml`
+  - `.github/workflows/oracle-cdw.yml` → `.github/workflows/oracle-account-b.yml`
+- **GitHub Secrets migrated to GitHub Environments.** Each account corresponds
+  to a GitHub Environment (`account_a`, `account_b`) with same-named secrets
+  (`OCI_USER`, `OCI_TENANCY`, `INSTANCE_NAME`, `ACCOUNT_LABEL`, …) instead of
+  prefixed repo-level secrets (`GMX_OCI_USER`, `CDW_OCI_USER`, …).
+- Local `accounts/<key>.env` files renamed to match (gitignored either way).
+- Friendly account labels (e.g. `🇩🇪 GMX`) now live exclusively in
+  `ACCOUNT_LABEL` — set in the env file (local) or environment secret (CI).
+  They appear in Telegram messages but are never committed.
+
+### Added
+- `.github/dependabot.yml` — weekly auto-update PRs for GitHub Actions versions.
+
+### Migration
+
+Existing users:
+
+1. Rename your local files: `mv accounts/gmx.env accounts/account-a.env`
+   (and the same for any others).
+2. Re-install launchd jobs under the new keys:
+   ```
+   ./scripts/install-launchd.sh uninstall gmx
+   ./scripts/install-launchd.sh install account-a 0 30
+   ```
+3. In GitHub: create environments `account_a` / `account_b`, move each old
+   `<ACCT>_*` repo secret to its environment as the un-prefixed name, then
+   delete the old repo secrets.
+
 ## [1.0.1] - 2026-05-01
 
 ### Changed
@@ -33,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Secrets read from per-account `.env` files (gitignored) or from GitHub Secrets in CI
 - OCI API keys never committed; `~/.oci/config` synthesized per workflow run
 
-[Unreleased]: https://github.com/cesarwerlich/oracle-cloud-launcher/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/cesarwerlich/oracle-cloud-launcher/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/cesarwerlich/oracle-cloud-launcher/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/cesarwerlich/oracle-cloud-launcher/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/cesarwerlich/oracle-cloud-launcher/releases/tag/v1.0.0

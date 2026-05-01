@@ -1,25 +1,32 @@
-name: Oracle CDW Launcher
+name: Oracle Account B Launcher
+
+# Account-agnostic workflow. The actual OCI account is determined by the
+# `account_b` GitHub Environment, which holds the secrets used below.
 
 on:
   schedule:
-    # Run at :15 and :45 every hour (UTC) — staggered from GMX
+    # Runs at :15 and :45 every hour (UTC) — staggered from account-a.
     - cron: '15,45 * * * *'
   workflow_dispatch: {}
 
 concurrency:
-  group: oracle-cdw
+  group: oracle-account-b
   cancel-in-progress: false
 
 jobs:
   launch:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    environment: account_b
+
+    env:
+      ACCOUNT_KEY: account-b
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install jq
+      - name: Sanity-check jq
         run: jq --version
 
       - name: Install OCI CLI
@@ -33,18 +40,20 @@ jobs:
         run: oci --version
 
       - name: Write SSH public key
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           mkdir -p "$HOME/.ssh"
-          printf '%s\n' "${{ secrets.SSH_PUBLIC_KEY }}" > "$HOME/.ssh/id_rsa.pub"
+          printf '%s\n' "$SSH_PUBLIC_KEY" > "$HOME/.ssh/id_rsa.pub"
           chmod 644 "$HOME/.ssh/id_rsa.pub"
 
       - name: Write OCI config + API key
         env:
-          OCI_USER: ${{ secrets.CDW_OCI_USER }}
-          OCI_FINGERPRINT: ${{ secrets.CDW_OCI_FINGERPRINT }}
-          OCI_TENANCY: ${{ secrets.CDW_OCI_TENANCY }}
-          OCI_REGION: ${{ secrets.CDW_OCI_REGION }}
-          OCI_KEY_PEM: ${{ secrets.CDW_OCI_KEY_PEM }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_KEY_PEM: ${{ secrets.OCI_KEY_PEM }}
         run: |
           mkdir -p "$HOME/.oci"
           printf '%s\n' "$OCI_KEY_PEM" > "$HOME/.oci/api-key.pem"
@@ -61,17 +70,17 @@ jobs:
 
       - name: Write account env file
         env:
-          ACCOUNT_LABEL: "🇺🇸 CDW (CI)"
-          COMPARTMENT_OCID: ${{ secrets.CDW_COMPARTMENT_OCID }}
-          SUBNET_OCID: ${{ secrets.CDW_SUBNET_OCID }}
-          IMAGE_OCID: ${{ secrets.CDW_IMAGE_OCID }}
-          AD_NAMES: ${{ secrets.CDW_AD_NAMES }}
-          INSTANCE_NAME: ${{ vars.CDW_INSTANCE_NAME || 'oracle-cdw-vm-arm-01' }}
+          ACCOUNT_LABEL: ${{ secrets.ACCOUNT_LABEL }}
+          COMPARTMENT_OCID: ${{ secrets.COMPARTMENT_OCID }}
+          SUBNET_OCID: ${{ secrets.SUBNET_OCID }}
+          IMAGE_OCID: ${{ secrets.IMAGE_OCID }}
+          AD_NAMES: ${{ secrets.AD_NAMES }}
+          INSTANCE_NAME: ${{ secrets.INSTANCE_NAME }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           mkdir -p accounts
-          cat > accounts/cdw.env <<EOF
+          cat > "accounts/${ACCOUNT_KEY}.env" <<EOF
           ACCOUNT_LABEL="$ACCOUNT_LABEL"
           COMPARTMENT_OCID="$COMPARTMENT_OCID"
           SUBNET_OCID="$SUBNET_OCID"
@@ -92,4 +101,4 @@ jobs:
       - name: Run launcher
         run: |
           chmod +x ./oracle-launch.sh
-          ./oracle-launch.sh cdw
+          ./oracle-launch.sh "$ACCOUNT_KEY"

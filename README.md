@@ -12,12 +12,25 @@ You can pick either one, or run both in parallel as redundant pollers — the id
 ## Features
 
 - 🌍 **Multi-account** — one parameterized script handles any number of OCI accounts
+- 🕵️ **Account-agnostic identifiers** — committed code uses generic keys (`account-a`, `account-b`); your real account names live only in secrets / gitignored env files
 - 🔁 **Idempotent** — exits cleanly when an instance already exists
 - 🚦 **Rate-limit aware** — respects HTTP 429 responses
 - 🎯 **AD rotation** — cycles through availability domains on each retry
-- 🔔 **Notifications** — macOS Notification Center + optional Telegram, account-prefixed
-- 🔐 **Secrets-safe** — `.env` files gitignored; CI uses GitHub Secrets
+- 🔔 **Notifications** — macOS Notification Center + optional Telegram, with friendly per-account labels
+- 🔐 **Secrets-safe** — `.env` files gitignored; CI uses GitHub Environment secrets
 - ⚡ **Parallel-safe** — per-account locks, logs, and isolated state
+
+---
+
+## Naming Convention
+
+This repo deliberately uses **anonymized account keys** (`account-a`, `account-b`, `account-c`, …) in all committed files — workflow names, log paths, lock files, and launchd labels. The only place your *real* account identity (region, tenancy, friendly name) appears is:
+
+- Your local `accounts/<key>.env` files — **gitignored**
+- GitHub Environment secrets — **encrypted, per-environment**
+- Telegram messages you receive — set via `ACCOUNT_LABEL` (e.g. `🌎 Production`, `Production`, `🌎 EU-West`)
+
+Why? So you can safely make the repo public without leaking metadata about your Oracle setup.
 
 ---
 
@@ -57,7 +70,7 @@ cd ~/.oci
 openssl genrsa -out my-account-api-key.pem 2048
 chmod 600 my-account-api-key.pem
 openssl rsa -pubout -in my-account-api-key.pem -out my-account-api-key_public.pem
-echo "OCI_API_KEY" >> my-account-api-key.pem    # silences a warning
+echo "OCI_API_KEY" >> my-account-api-key.pem    # silences a CLI warning
 
 # Print the fingerprint (you'll need it in OCI Console + ~/.oci/config):
 openssl rsa -pubout -outform DER -in my-account-api-key.pem 2>/dev/null \
@@ -109,41 +122,42 @@ oci compute image list --compartment-id "$TENANCY" \
 git clone https://github.com/cesarwerlich/oracle-cloud-launcher.git
 cd oracle-cloud-launcher
 
-cp accounts/example.env accounts/myacct.env
-# edit accounts/myacct.env with the OCIDs from step A4
+cp accounts/example.env accounts/account-a.env
+# edit accounts/account-a.env — paste OCIDs from step A4
+# set ACCOUNT_LABEL to whatever you want to see in Telegram (e.g. "🇩🇪 EU Frankfurt")
 ```
 
 Run it once manually to test:
 
 ```bash
-./oracle-launch.sh myacct
+./oracle-launch.sh account-a
 ```
 
 ### A6. Schedule via launchd
 
 ```bash
 # Install: launches at minutes :00 and :30 of each hour
-./scripts/install-launchd.sh install myacct 0 30
+./scripts/install-launchd.sh install account-a 0 30
 
 # Verify
 ./scripts/install-launchd.sh status
 
 # Watch logs
-tail -f ~/Library/Logs/oracle-myacct-launch.log
+tail -f ~/Library/Logs/oracle-account-a-launch.log
 
 # Uninstall
-./scripts/install-launchd.sh uninstall myacct
+./scripts/install-launchd.sh uninstall account-a
 ```
 
 For multiple accounts, **stagger the minutes** so they don't all fire at once:
 
 ```bash
-./scripts/install-launchd.sh install acct1 0 30   # :00, :30
-./scripts/install-launchd.sh install acct2 15 45  # :15, :45
+./scripts/install-launchd.sh install account-a 0 30   # :00, :30
+./scripts/install-launchd.sh install account-b 15 45  # :15, :45
 ```
 
 > The reverse-domain prefix defaults to `com.local`. Override with the optional 5th argument or set `LAUNCHD_REVERSE_DOMAIN`:
-> `./scripts/install-launchd.sh install myacct 0 30 com.mycompany`
+> `./scripts/install-launchd.sh install account-a 0 30 com.mycompany`
 
 ---
 
@@ -157,25 +171,41 @@ Runs every 30 minutes in GitHub's runners — true 24/7 coverage, no local machi
 gh repo create oracle-cloud-launcher --private --source=. --push
 ```
 
-(The included `.github/workflows/oracle-gmx.yml` and `oracle-cdw.yml` are tailored for two example accounts. Duplicate one and rename for each account you want to run.)
+The included `.github/workflows/oracle-account-a.yml` and `oracle-account-b.yml` are templates. Each one is bound to a **GitHub Environment** of the same name (`account_a`, `account_b`). You configure secrets per environment, not per workflow.
 
-### B2. Configure GitHub Secrets
+### B2. Create GitHub Environments
 
-Per account (replace `<ACCT>` with `GMX`, `CDW`, etc.):
+In **Settings → Environments → New environment**, create:
+
+- `account_a`
+- `account_b` (and so on, one per OCI account you want to poll)
+
+Or via CLI:
+
+```bash
+gh api repos/<owner>/<repo>/environments/account_a --method PUT
+gh api repos/<owner>/<repo>/environments/account_b --method PUT
+```
+
+### B3. Configure secrets per environment
+
+In each environment's secret list, add the same set (so workflows can use `${{ secrets.OCI_USER }}` regardless of which account they're for):
 
 | Secret | What goes in it |
 |--------|-----------------|
-| `<ACCT>_OCI_USER` | User OCID |
-| `<ACCT>_OCI_FINGERPRINT` | API key fingerprint |
-| `<ACCT>_OCI_TENANCY` | Tenancy OCID |
-| `<ACCT>_OCI_REGION` | e.g. `eu-frankfurt-1` |
-| `<ACCT>_OCI_KEY_PEM` | **Full** content of the `.pem` private key file |
-| `<ACCT>_COMPARTMENT_OCID` | Usually same as tenancy OCID for free tier |
-| `<ACCT>_SUBNET_OCID` | Subnet OCID |
-| `<ACCT>_IMAGE_OCID` | Boot image OCID |
-| `<ACCT>_AD_NAMES` | Space-separated AD names |
+| `OCI_USER` | User OCID for this account |
+| `OCI_FINGERPRINT` | API key fingerprint |
+| `OCI_TENANCY` | Tenancy OCID |
+| `OCI_REGION` | e.g. `eu-frankfurt-1` |
+| `OCI_KEY_PEM` | **Full** content of the `.pem` private key file |
+| `COMPARTMENT_OCID` | Usually same as tenancy OCID for free tier |
+| `SUBNET_OCID` | Subnet OCID |
+| `IMAGE_OCID` | Boot image OCID |
+| `AD_NAMES` | Space-separated AD names |
+| `INSTANCE_NAME` | Display name of the launched instance |
+| `ACCOUNT_LABEL` | Friendly label for notifications (e.g. `🇩🇪 EU Frankfurt`) |
 
-Shared:
+### B4. Repository-level secrets (shared across all environments)
 
 | Secret | What goes in it |
 |--------|-----------------|
@@ -183,30 +213,27 @@ Shared:
 | `TELEGRAM_BOT_TOKEN` | Bot token (optional) |
 | `TELEGRAM_CHAT_ID` | Your Telegram chat ID (optional) |
 
-Optional repo variables (not secrets):
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `<ACCT>_INSTANCE_NAME` | `oracle-<acct>-vm-arm-01` | Display name of the launched instance |
-
 Set them with `gh`:
 
 ```bash
-gh secret set GMX_OCI_USER --body "ocid1.user.oc1..xxxx"
-gh secret set GMX_OCI_KEY_PEM < ~/.oci/oracle-gmx-oci-api-key.pem
-# ... etc
+# Per-environment
+gh secret set OCI_USER --env account_a --body "ocid1.user.oc1..xxxx"
+gh secret set OCI_KEY_PEM --env account_a < ~/.oci/account-a-api-key.pem
+
+# Repository-level
+gh secret set SSH_PUBLIC_KEY < ~/.ssh/id_rsa.pub
 ```
 
-### B3. Trigger the workflow
+### B5. Trigger the workflow
 
-The workflows run on cron, but you can trigger immediately from the **Actions tab → Oracle GMX Launcher → Run workflow**.
+The workflows run on cron, but you can trigger immediately from the **Actions tab → Oracle Account A Launcher → Run workflow**.
 
-### B4. Schedule
+### B6. Schedule
 
-Cron expressions are in `.github/workflows/oracle-*.yml`:
+Cron expressions are in `.github/workflows/oracle-account-*.yml`:
 
-- GMX: `0,30 * * * *` (every hour at :00 and :30)
-- CDW: `15,45 * * * *` (every hour at :15 and :45)
+- `account-a`: `0,30 * * * *` (every hour at :00 and :30)
+- `account-b`: `15,45 * * * *` (every hour at :15 and :45)
 
 > ⚠️ GitHub Actions cron can be delayed several minutes during peak load — this is documented behavior. For tight schedules, use launchd instead.
 
@@ -216,15 +243,21 @@ Cron expressions are in `.github/workflows/oracle-*.yml`:
 
 ### For launchd (Mode A)
 
-1. Create `accounts/<acct>.env` from `accounts/example.env`
-2. Run `./scripts/install-launchd.sh install <acct> <minute_a> <minute_b>`
+1. `cp accounts/example.env accounts/account-c.env` (pick the next free letter)
+2. Fill in the OCIDs and friendly `ACCOUNT_LABEL`
+3. `./scripts/install-launchd.sh install account-c <minute_a> <minute_b>`
 
 ### For GitHub Actions (Mode B)
 
-1. Copy `.github/workflows/oracle-gmx.yml` → `oracle-<acct>.yml`
-2. Replace `gmx` / `GMX` references with your account name
-3. Pick non-overlapping cron minutes
-4. Add the `<ACCT>_*` secrets via `gh secret set`
+1. Create a new environment: `gh api repos/<owner>/<repo>/environments/account_c --method PUT`
+2. Add all the per-environment secrets to it
+3. Copy `.github/workflows/oracle-account-a.yml` → `oracle-account-c.yml`
+4. Inside the new file, change three things:
+   - `name: Oracle Account C Launcher`
+   - `cron:` to a non-overlapping minute pair (e.g. `'5,35 * * * *'`)
+   - `concurrency.group: oracle-account-c`
+   - `environment: account_c`
+   - `env.ACCOUNT_KEY: account-c`
 
 ---
 
@@ -232,19 +265,21 @@ Cron expressions are in `.github/workflows/oracle-*.yml`:
 
 ```
 .
-├── oracle-launch.sh                 # Generic launcher (takes account name as arg)
+├── oracle-launch.sh                      # Generic launcher (takes account name as arg)
 ├── accounts/
-│   ├── example.env                  # Template — copy this
-│   └── (your <acct>.env files)      # Gitignored
+│   ├── example.env                       # Template — copy this
+│   └── (your <account-key>.env files)    # Gitignored
 ├── templates/
-│   └── launchd.plist.template       # Used by install-launchd.sh
+│   └── launchd.plist.template            # Used by install-launchd.sh
 ├── scripts/
-│   └── install-launchd.sh           # Installs/uninstalls launchd jobs
-├── .github/workflows/
-│   ├── oracle-gmx.yml               # Example workflow for one account
-│   └── oracle-cdw.yml               # Example workflow for another account
+│   └── install-launchd.sh                # Installs/uninstalls launchd jobs
+├── .github/
+│   ├── dependabot.yml                    # Auto-updates GitHub Actions versions
+│   └── workflows/
+│       ├── oracle-account-a.yml          # Template workflow for account "a"
+│       └── oracle-account-b.yml          # Template workflow for account "b"
 ├── CHANGELOG.md
-├── LICENSE                          # MIT
+├── LICENSE                               # MIT
 └── README.md
 ```
 
@@ -264,7 +299,7 @@ Cron expressions are in `.github/workflows/oracle-*.yml`:
    - On connection timeout → log, notify, exit
    - On auth error → log, notify, exit (fatal)
    - On success → log, notify, exit
-5. If all retries exhausted → log, notify "out of capacity"
+5. If all retries exhausted → log, notify "out of capacity", exit 0
 
 ### Notifications you'll receive
 
@@ -277,6 +312,8 @@ Cron expressions are in `.github/workflows/oracle-*.yml`:
 | Network timeout | `🖥️ <LABEL>: 🌐 Connection timeout - will try next run` |
 | Auth error | `🖥️ <LABEL>: ❌ Auth error - check your OCI config` |
 
+`<LABEL>` is the `ACCOUNT_LABEL` you set in the env file or environment secret.
+
 ---
 
 ## Once an Instance Is Provisioned
@@ -285,9 +322,9 @@ The idempotency check fires on every subsequent run, so you'll just keep getting
 
 ```bash
 # launchd
-./scripts/install-launchd.sh uninstall <acct>
+./scripts/install-launchd.sh uninstall <account-key>
 
-# GitHub Actions: edit .github/workflows/oracle-<acct>.yml
+# GitHub Actions: edit .github/workflows/oracle-<account-key>.yml
 # and remove the `schedule:` block (or delete the file)
 ```
 
