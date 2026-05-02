@@ -22,20 +22,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/accounts/${ACCOUNT_NAME}.env"
 
 # ── Lock dir (per-account, prevents concurrent runs of the same account) ──
+# Uses a PID file inside the lock dir for self-healing stale locks.
 LOCK_DIR="/tmp/oracle-${ACCOUNT_NAME}.lock"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  if [[ -f "$LOCK_DIR" ]]; then
-    rm -f "$LOCK_DIR"
-    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${ACCOUNT_NAME}] Another instance is already running. Exiting." >&2
-      exit 0
-    fi
-  else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${ACCOUNT_NAME}] Another instance is already running. Exiting." >&2
+  # Lock dir exists — check if the owning process is still alive
+  LOCK_PID=$(cat "${LOCK_DIR}/pid" 2>/dev/null || true)
+  if [[ -n "$LOCK_PID" ]] && kill -0 "$LOCK_PID" 2>/dev/null; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${ACCOUNT_NAME}] Another instance is already running (PID $LOCK_PID). Exiting." >&2
+    exit 0
+  fi
+  # Stale lock (process gone) — clean up and take ownership
+  rm -rf "$LOCK_DIR"
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${ACCOUNT_NAME}] Could not acquire lock. Exiting." >&2
     exit 0
   fi
 fi
-trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+echo $$ > "${LOCK_DIR}/pid"
+trap 'rm -rf "$LOCK_DIR" 2>/dev/null' EXIT
 
 # ── Start time (for elapsed-time reporting in notifications) ────────
 START_TIME=$(date +%s)
@@ -132,7 +136,7 @@ notify() {
   else
     duration="${secs}s"
   fi
-  local prefixed="${ACCOUNT_LABEL}: ${msg} — ${duration} ${SOURCE_EMOJI}"
+  local prefixed="${SOURCE_EMOJI} ${ACCOUNT_LABEL}: ${msg} — ${duration}"
 
   # macOS Notification Center
   osascript -e "display notification \"$prefixed\" with title \"Oracle Cloud\"" 2>/dev/null || true
@@ -143,7 +147,7 @@ notify() {
     resp=$(curl -sS -w "\n%{http_code}" -m 10 -X POST \
       "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
       --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-      --data-urlencode "text=🖥️ ${prefixed}" 2>&1) || true
+      --data-urlencode "text=${prefixed}" 2>&1) || true
     http_code=$(echo "$resp" | tail -n1)
     body=$(echo "$resp" | sed '$d')
 
