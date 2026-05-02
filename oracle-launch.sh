@@ -37,6 +37,17 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
 fi
 trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
 
+# ── Start time (for elapsed-time reporting in notifications) ────────
+START_TIME=$(date +%s)
+
+# ── Runtime source (GitHub Actions vs local macOS / launchd) ────────
+# $GITHUB_ACTIONS is automatically set to "true" by the Actions runner.
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  SOURCE_EMOJI="⚙️"   # GitHub Actions
+else
+  SOURCE_EMOJI="💻"   # local Mac / launchd
+fi
+
 # ── Pre-flight checks ──────────────────────────────────────────────
 for cmd in oci jq curl; do
   if ! command -v "$cmd" &>/dev/null; then
@@ -112,7 +123,16 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${ACCOUNT_LABEL}] $*" | tee -a "$L
 # ── Notifications ──────────────────────────────────────────────────
 notify() {
   local msg="$1"
-  local prefixed="${ACCOUNT_LABEL}: ${msg}"
+  local elapsed=$(( $(date +%s) - START_TIME ))
+  local mins=$(( elapsed / 60 ))
+  local secs=$(( elapsed % 60 ))
+  local duration
+  if [[ $mins -gt 0 ]]; then
+    duration="${mins}m ${secs}s"
+  else
+    duration="${secs}s"
+  fi
+  local prefixed="${ACCOUNT_LABEL}: ${msg} — ${duration} ${SOURCE_EMOJI}"
 
   # macOS Notification Center
   osascript -e "display notification \"$prefixed\" with title \"Oracle Cloud\"" 2>/dev/null || true
